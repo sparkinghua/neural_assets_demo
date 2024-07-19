@@ -1,0 +1,7 @@
+nvdiffrast
+torch
+numpy
+Pillow
+matplotlib
+trimesh
+scipy
