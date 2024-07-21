@@ -14,8 +14,8 @@ import torch
 # ----------------------------------------------------------------------------
 
 
-def normalize(v):
-    norm = torch.sum(v ** 2, -1, keepdim=True) ** 0.5
+def normalize(v: torch.Tensor) -> torch.Tensor:
+    norm = torch.sum(v**2, -1, keepdim=True) ** 0.5
     norm = torch.max(norm, torch.tensor(1e-8, device=norm.device))
     return v / norm
 

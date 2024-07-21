@@ -10,26 +10,30 @@ def init_weights(m):
 
 
 class RNA(nn.Module):
-    def __init__(self, in_features, out_features, hidden_features, num_layers, has_uv=True, tex_res=512, fourier_enc=False):
+    def __init__(
+        self, in_features, out_features, hidden_features, num_layers, has_uv=True, tex_res=512, tex_channels=8, fourier_enc=True
+    ):
         super(RNA, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.hidden_features = hidden_features
         self.num_layers = num_layers
+        self.has_uv = has_uv
         self.fourier_enc = fourier_enc
         if self.fourier_enc:
-            self.L_pos = 10
+            self.L_pos = 4
             self.L_dir = 4
             self.in_features += 6 * self.L_pos + 6 * self.L_dir * 3
         else:
             self.L_pos = 0
             self.L_dir = 0
 
-        self.has_uv = has_uv
         if self.has_uv:
-            self.in_features += 3
+            self.in_features += tex_channels
             self.tex_res = tex_res
-            self.texture = nn.Parameter(0.5 * torch.ones(1, 3, tex_res, tex_res))
+            self.tex_channels = tex_channels
+            self.texture = nn.Parameter(torch.zeros(1, tex_channels, tex_res, tex_res))
+            torch.nn.init.kaiming_uniform_(self.texture)
         else:
             self.tex_res = None
             self.texture = None
@@ -41,22 +45,17 @@ class RNA(nn.Module):
             self.layers.append(nn.Linear(hidden_features, hidden_features))
             self.layers.append(nn.ReLU())
         self.layers.append(nn.Linear(hidden_features, out_features))
-        self.layers.append(nn.Sigmoid())
+        self.layers.append(nn.ReLU())
 
         self.apply(init_weights)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.has_uv:
             uvs = 2.0 * x[..., -2:] - 1.0
-            color = (
-                torch.nn.functional.grid_sample(
-                    self.texture, uvs.unsqueeze(0).unsqueeze(0), mode="bilinear", padding_mode="border", align_corners=True
-                )
-                .squeeze(0)
-                .permute(1, 2, 0)
-                .squeeze(0)
-            )
-            color = torch.clamp(color, 0, 1)
+            color = torch.nn.functional.grid_sample(
+                self.texture.expand(uvs.shape[0], -1, -1, -1), uvs, mode="bilinear", padding_mode="border", align_corners=True
+            ).permute(0, 2, 3, 1)
+            color = torch.clamp(color, 0.0, 1.0)
             x = torch.cat([x[..., :-2], color], dim=-1)
         if self.fourier_enc:
             pos = x[..., :3]
