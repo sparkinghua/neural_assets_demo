@@ -24,7 +24,7 @@ class Render:
 
         self.smooth_angle = 0.0
         workdir = f"{pathlib.Path(__file__).absolute().parents[0]}"
-        ans_path = f"{workdir}/{config.file_paths.data_dir}/{config.file_paths.data}/ans.json"
+        ans_path = f"{workdir}/{config.file_paths.data_dir}/{config.file_paths.data}/train/ans.json"
         with open(ans_path, "r") as f:
             self.ans = json.load(f)
         self.smooth_light_pos = np.asarray(self.ans["light_pos"], np.float32)

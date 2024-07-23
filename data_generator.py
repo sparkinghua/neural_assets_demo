@@ -7,6 +7,7 @@ import pathlib
 import imageio
 import json
 from tqdm import tqdm
+import argparse
 
 import util
 from render import render_refl
@@ -25,7 +26,28 @@ def fibonacci_sphere(samples=1024, radius=1.0):
     return np.array(points, dtype=np.float32)
 
 
-def data_generator(radius=3.5, samples=1024, x=0.4, n=1.0, f=200.0, resolution=[512, 512]):
+def data_generator():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--samples", type=int, default=1024)
+    parser.add_argument("--radius", type=float, default=3.5)
+    parser.add_argument("--x", type=float, default=0.4)
+    parser.add_argument("--n", type=float, default=1.0)
+    parser.add_argument("--f", type=float, default=200.0)
+    parser.add_argument("--resolution", type=int, nargs=2, default=[512, 512])
+
+    parser.add_argument("--move-light", action="store_true")
+    parser.add_argument("--dataset", type=str, choices=["train", "test", "valid"], default="train")
+
+    args = parser.parse_args()
+    samples: int = args.samples
+    radius: float = args.radius
+    x: float = args.x
+    n: float = args.n
+    f: float = args.f
+    resolution: list = args.resolution
+    dataset: str = args.dataset
+    is_move_light: bool = args.move_light
+
     light_pos = np.asarray([2.0, 2.0, -2.0, 1.0], np.float32)
     emission = np.asarray([1.0, 1.0, 1.0], np.float32) * 5.0
     ambient = np.asarray([1.0, 1.0, 1.0], np.float32) * 0.01
@@ -51,7 +73,10 @@ def data_generator(radius=3.5, samples=1024, x=0.4, n=1.0, f=200.0, resolution=[
 
     for i in range(samples):
         r_rot = util.random_rotation_translation(0.25)
-        r_rot_light = util.random_rotation_translation(0.25)
+        if is_move_light:
+            r_rot_light = util.random_rotation_translation(0.25)
+        else:
+            r_rot_light = util.rotate_y(0)
         r_mv = np.matmul(util.translate(0, 0, -radius), r_rot)
         r_mvp.append(np.matmul(proj, r_mv).astype(np.float32))
         r_camera_pos.append(np.linalg.inv(r_mv)[:3, 3])
@@ -64,9 +89,10 @@ def data_generator(radius=3.5, samples=1024, x=0.4, n=1.0, f=200.0, resolution=[
     r_emission = np.stack(r_emission, axis=0)
     r_ambient = np.stack(r_ambient, axis=0)
 
-    datadir = f"{pathlib.Path(__file__).absolute().parents[0]}/data/move_light"
+    data_name = "move_light" if is_move_light else "static_light"
+    datadir = f"{pathlib.Path(__file__).absolute().parents[0]}/data/{data_name}/{dataset}"
     with open(f"{datadir}/ans.json", "w") as f:
-        json.dump(ans_dict, f)
+        json.dump(ans_dict, f, indent=2)
     with open(f"{datadir}/meta.npy", "wb") as f:
         np.savez_compressed(
             f, camera_pos=r_camera_pos, light_pos=r_light_pos, mvp=r_mvp, emission=r_emission, ambient=r_ambient
@@ -84,7 +110,7 @@ def data_generator(radius=3.5, samples=1024, x=0.4, n=1.0, f=200.0, resolution=[
     glctx = dr.RasterizeCudaContext()
 
     scenedir = f"{pathlib.Path(__file__).absolute().parents[0]}/scene"
-    scene = trimesh.load(f"{scenedir}/spot/spot_triangulated_good.obj")
+    scene = trimesh.load(f"{scenedir}/spot/spot.obj")
     pos_data = scene.vertices
     pos_idx_data = scene.faces
     normals_data = scene.vertex_normals

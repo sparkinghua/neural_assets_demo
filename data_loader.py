@@ -11,11 +11,11 @@ from configs import MainConfig
 class RenderDataset(Dataset):
     """Dataset class for loading scene data."""
 
-    def __init__(self, config):
+    def __init__(self, config: MainConfig, dataset: str):
         self.config = config
 
         workdir = f"{pathlib.Path(__file__).absolute().parents[0]}"
-        datadir = f"{workdir}/{config.file_paths.data_dir}/{config.file_paths.data}"
+        datadir = f"{workdir}/{config.file_paths.data_dir}/{config.file_paths.data}/{dataset}"
         with open(f"{datadir}/meta.npy", "rb") as f:
             data = np.load(f, allow_pickle=True)
             self.r_light_pos = np.asarray(data["light_pos"], np.float32)
@@ -62,19 +62,19 @@ class RenderDataset(Dataset):
             self.r_emission[idx],
             self.r_ambient[idx],
         )
-    
-    def get_data(self):
-        return self.r_light_pos, self.r_camera_pos, self.r_mvp, self.r_emission, self.r_ambient
-    
-    def get_img(self):
-        return self.imgs
 
 
-def load_data(config: MainConfig) -> tuple[DataLoader, dict]:
+def load_data(config: MainConfig) -> tuple[dict, dict]:
     """Load data: reference images, light positions, camera positions, mvp matrices, emission, and ambient."""
-    dataset = RenderDataset(config)
-    dataloader = DataLoader(dataset, batch_size=config.optim.batch_size, shuffle=True, num_workers=0)
+    dataset_train = RenderDataset(config, "train")
+    dataset_valid = RenderDataset(config, "valid")
+    dataset_test = RenderDataset(config, "test")
+    dataloader = dict()
+    dataloader["train"] = DataLoader(dataset_train, batch_size=config.optim.batch_size, shuffle=True, num_workers=0)
+    dataloader["valid"] = DataLoader(dataset_valid, batch_size=config.optim.batch_size, shuffle=False, num_workers=0)
+    dataloader["test"] = DataLoader(dataset_test, batch_size=config.optim.batch_size, shuffle=False, num_workers=0)
     metadata = dict()
-    metadata["samples"] = dataset.samples
-    metadata["resolution"] = dataset.resolution
+    metadata["train"] = {"samples": dataset_train.samples, "resolution": dataset_train.resolution}
+    metadata["valid"] = {"samples": dataset_valid.samples, "resolution": dataset_valid.resolution}
+    metadata["test"] = {"samples": dataset_test.samples, "resolution": dataset_test.resolution}
     return dataloader, metadata

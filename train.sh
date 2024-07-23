@@ -2,8 +2,8 @@ python main.py \
     --config.file-paths.data "static_light" \
     --config.file-paths.scene "spot" \
     --config.file-paths.resume None \
-    --config.log-display.log-interval 128 \
-    --config.log-display.display-interval 64 \
+    --config.log-display.log-interval 256 \
+    --config.log-display.display-interval 128 \
     --config.log-display.checkpoint-interval 10 \
     --config.model-param.hidden-features 256 \
     --config.model-param.num-layers 4 \
@@ -14,5 +14,6 @@ python main.py \
     --config.model-param.L-dir 6 \
     --config.optim.batch-size 2 \
     --config.optim.lr 1e-3 \
-    --config.optim.max-iter 100 \
-    --config.optim.warmup-iter 5 \
+    --config.optim.weight-decay 1e-4 \
+    --config.optim.max-iter 40 \
+    --config.optim.warmup-iter 4 \

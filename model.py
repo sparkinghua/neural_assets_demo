@@ -41,12 +41,12 @@ class RNA(nn.Module):
 
         self.layers = nn.ModuleList()
         self.layers.append(nn.Linear(self.in_features, self.hidden_features))
-        self.layers.append(nn.LeakyReLU())
+        self.layers.append(nn.ReLU())
         for _ in range(self.num_layers - 2):
             self.layers.append(nn.Linear(self.hidden_features, self.hidden_features))
-            self.layers.append(nn.LeakyReLU())
+            self.layers.append(nn.ReLU())
         self.layers.append(nn.Linear(self.hidden_features, self.out_features))
-        self.layers.append(nn.ReLU6())
+        self.layers.append(nn.ReLU())
 
         self.apply(init_weights)
 

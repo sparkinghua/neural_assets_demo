@@ -75,6 +75,8 @@ class OptimConfig:
     """batch size for training"""
     lr: float = 1e-3
     """learning rate for training"""
+    weight_decay: float = 1e-4
+    """weight decay for training"""
 
 
 @dataclass(frozen=True)
