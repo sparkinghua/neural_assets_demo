@@ -2,6 +2,8 @@ import numpy as np
 import torch
 from torch import nn
 
+from configs import ModelParamConfig
+
 
 def init_weights(m):
     if type(m) == nn.Linear:
@@ -10,42 +12,41 @@ def init_weights(m):
 
 
 class RNA(nn.Module):
-    def __init__(
-        self, in_features, out_features, hidden_features, num_layers, has_uv=True, tex_res=512, tex_channels=8, fourier_enc=True
-    ):
+    def __init__(self, config: ModelParamConfig):
         super(RNA, self).__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.hidden_features = hidden_features
-        self.num_layers = num_layers
-        self.has_uv = has_uv
-        self.fourier_enc = fourier_enc
+        self.config = config
+        self.in_features = config.in_features
+        self.out_features = config.out_features
+        self.hidden_features = config.hidden_features
+        self.num_layers = config.num_layers
+        self.has_uv = config.has_uv
+        self.fourier_enc = config.fourier_enc
         if self.fourier_enc:
-            self.L_pos = 4
-            self.L_dir = 4
+            self.L_pos = config.L_pos
+            self.L_dir = config.L_dir
             self.in_features += 6 * self.L_pos + 6 * self.L_dir * 3
         else:
             self.L_pos = 0
             self.L_dir = 0
 
         if self.has_uv:
-            self.in_features += tex_channels
-            self.tex_res = tex_res
-            self.tex_channels = tex_channels
-            self.texture = nn.Parameter(torch.zeros(1, tex_channels, tex_res, tex_res))
+            self.in_features += config.tex_channels
+            self.tex_res = config.tex_res
+            self.tex_channels = config.tex_channels
+            self.texture = nn.Parameter(torch.zeros(1, self.tex_channels, self.tex_res, self.tex_res))
             torch.nn.init.kaiming_uniform_(self.texture)
         else:
             self.tex_res = None
             self.texture = None
 
         self.layers = nn.ModuleList()
-        self.layers.append(nn.Linear(self.in_features, hidden_features))
-        self.layers.append(nn.ReLU())
-        for _ in range(num_layers - 2):
-            self.layers.append(nn.Linear(hidden_features, hidden_features))
-            self.layers.append(nn.ReLU())
-        self.layers.append(nn.Linear(hidden_features, out_features))
-        self.layers.append(nn.ReLU())
+        self.layers.append(nn.Linear(self.in_features, self.hidden_features))
+        self.layers.append(nn.LeakyReLU())
+        for _ in range(self.num_layers - 2):
+            self.layers.append(nn.Linear(self.hidden_features, self.hidden_features))
+            self.layers.append(nn.LeakyReLU())
+        self.layers.append(nn.Linear(self.hidden_features, self.out_features))
+        self.layers.append(nn.ReLU6())
 
         self.apply(init_weights)
 
