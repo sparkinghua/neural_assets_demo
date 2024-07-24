@@ -27,6 +27,7 @@ class Trainer:
         self.max_iter = config.optim.max_iter
         self.warmup_iter = config.optim.warmup_iter
         self.batch_size = config.optim.batch_size
+        self.early_stopping = config.optim.early_stopping
         self.log_interval = config.log_display.log_interval
         self.display_interval = config.log_display.display_interval
         self.display_res = config.log_display.display_res
@@ -36,6 +37,9 @@ class Trainer:
         self.valid_samples = self.metadata["valid"]["samples"]
         self.test_samples = self.metadata["test"]["samples"]
         self.train_resolution = self.metadata["train"]["resolution"]
+        self.valid_resolution = self.metadata["valid"]["resolution"]
+        self.test_resolution = self.metadata["test"]["resolution"]
+        self.is_rand_light = config.file_paths.data == "rand"
 
         self.train_psnr = []
         self.valid_psnr = []
@@ -69,14 +73,24 @@ class Trainer:
 
     def train(self):
         imgloss_avg = []
+        patience = 0
         self.logger.info("Start training...")
         for iter in range(self.init_iter, self.max_iter):
             print(f"iter={iter+1}/{self.max_iter}")
             self.model.train()
             i = -self.batch_size
-            for color, light_pos, camera_pos, mvp, emission, ambient in tqdm(self.dataloader["train"]):
+            for batch in tqdm(self.dataloader["train"]):
                 i += self.batch_size
-                color_opt = self.render.render(camera_pos, light_pos, mvp, emission, ambient, self.train_resolution, self.model)
+                if self.is_rand_light:
+                    color, light_dir, camera_pos, mvp, emission, ambient = batch
+                    color_opt = self.render.render_rand(
+                        camera_pos, light_dir, mvp, emission, ambient, self.train_resolution, self.model
+                    )
+                else:
+                    color, light_pos, camera_pos, mvp, emission, ambient = batch
+                    color_opt = self.render.render_point(
+                        camera_pos, light_pos, mvp, emission, ambient, self.train_resolution, self.model
+                    )
                 loss = self.loss_fn(color, color_opt)
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -108,21 +122,34 @@ class Trainer:
                     with torch.no_grad():
                         color_opt = self.render.display_render(self.train_resolution, self.model)
                     result_image = color_opt.detach()[0].cpu().numpy()[::-1]
-                    util.display_image(
-                        result_image,
-                        size=self.display_res,
-                        title="%d / %d, %d / %d" % (iter, self.max_iter, i, self.train_samples),
-                    )
+                    # util.display_image(
+                    #     result_image,
+                    #     size=self.display_res,
+                    #     title="%d / %d, %d / %d" % (iter, self.max_iter, i, self.train_samples),
+                    # )
                     self.frames.append((result_image * 255).astype(np.uint8))
+            # Save checkpoint
+            save_checkpoint = self.checkpoint_interval and ((iter + 1) % self.checkpoint_interval == 0)
+            if save_checkpoint:
+                self.save_checkpoint(iter)
+                with imageio.get_writer(f"{self.outputdir}/train.mp4", fps=self.fps) as writer:
+                    for frame in self.frames:
+                        writer.append_data(frame)
             # Validation
             valid_psnr_val = self.valid()
             self.valid_psnr.append(valid_psnr_val)
             s = "iter=%d, valid_psnr=%f" % (iter, valid_psnr_val)
             self.logger.info(s)
-            # Save checkpoint
-            save_checkpoint = self.checkpoint_interval and ((iter + 1) % self.checkpoint_interval == 0)
-            if save_checkpoint:
-                self.save_checkpoint(iter)
+            if self.early_stopping is not None:
+                if len(self.valid_psnr) > self.early_stopping + self.warmup_iter:
+                    if valid_psnr_val < self.valid_psnr[-2]:
+                        patience += 1
+                        if patience == self.early_stopping:
+                            self.logger.info("Early stopping.")
+                            break
+                    else:
+                        patience = 0
+                        
         self.logger.info("Training done.")
         test_psnr_val = self.test()
         s = "test_psnr=%f" % (test_psnr_val)
@@ -131,13 +158,22 @@ class Trainer:
     def valid(self) -> float:
         valid_loss_val = 0
         valid_len = 0
-        # self.model.eval()
+        self.model.eval()
         self.logger.info("Validation...")
-        for color, light_pos, camera_pos, mvp, emission, ambient in self.dataloader["valid"]:
-            with torch.no_grad():
-                color_opt = self.render.render(camera_pos, light_pos, mvp, emission, ambient, self.train_resolution, self.model)
+        with torch.no_grad():
+            for batch in self.dataloader["valid"]:
+                if self.is_rand_light:
+                    color, light_dir, camera_pos, mvp, emission, ambient = batch
+                    color_opt = self.render.render_rand(
+                        camera_pos, light_dir, mvp, emission, ambient, self.valid_resolution, self.model
+                    )
+                else:
+                    color, light_pos, camera_pos, mvp, emission, ambient = batch
+                    color_opt = self.render.render_point(
+                        camera_pos, light_pos, mvp, emission, ambient, self.valid_resolution, self.model
+                    )
                 valid_loss_val += self.loss_fn(color, color_opt)
-            valid_len += 1
+                valid_len += 1
         valid_loss_val /= valid_len
         valid_loss_val = valid_loss_val.detach().cpu().numpy()
         valid_psnr_val = -10.0 * np.log10(valid_loss_val)
@@ -148,11 +184,20 @@ class Trainer:
         test_len = 0
         self.model.eval()
         self.logger.info("Testing...")
-        for color, light_pos, camera_pos, mvp, emission, ambient in self.dataloader["test"]:
-            with torch.no_grad():
-                color_opt = self.render.render(camera_pos, light_pos, mvp, emission, ambient, self.train_resolution, self.model)
+        with torch.no_grad():
+            for batch in self.dataloader["test"]:
+                if self.is_rand_light:
+                    color, light_dir, camera_pos, mvp, emission, ambient = batch
+                    color_opt = self.render.render_rand(
+                        camera_pos, light_dir, mvp, emission, ambient, self.test_resolution, self.model
+                    )
+                else:
+                    color, light_pos, camera_pos, mvp, emission, ambient = batch
+                    color_opt = self.render.render_point(
+                        camera_pos, light_pos, mvp, emission, ambient, self.test_resolution, self.model
+                    )
                 test_loss_val += self.loss_fn(color, color_opt)
-            test_len += 1
+                test_len += 1
         test_loss_val /= test_len
         test_loss_val = test_loss_val.detach().cpu().numpy()
         test_psnr_val = -10.0 * np.log10(test_loss_val)
@@ -183,15 +228,6 @@ class Trainer:
             for frame in self.frames:
                 writer.append_data(frame)
             self.frames = []
-        # imgloss_log = np.asarray(self.imgloss_log, np.float32)
-        # imgpsnr_log = np.asarray(self.imgpsnr_log, np.float32)
-        # fig = plt.figure(figsize=(12, 6))
-        # ax = fig.add_subplot(1, 2, 1)
-        # ax.set_title("Image Loss")
-        # ax.set_xlabel("Step")
-        # ax.set_ylabel("Loss")
-        # ax.grid()
-        # ax.scatter(range(0, len(imgloss_log) * self.log_interval, self.log_interval), imgloss_log)
 
         fig = plt.figure(figsize=(12, 6))
         ax = fig.add_subplot(1, 2, 1)
@@ -211,4 +247,18 @@ class Trainer:
         fig.savefig(f"{self.outputdir}/psnr.png")
         with open(f"{self.outputdir}/psnr.npy", "wb") as f:
             np.savez_compressed(f, train_psnr=self.train_psnr, valid_psnr=self.valid_psnr)
-        plt.show()
+        # plt.show()
+
+    def show_result(self):
+        self.model.eval()
+        print("Rendering results...")
+        self.frames = []
+        with torch.no_grad():
+            for _ in tqdm(range(100)):
+                color_opt = self.render.display_render(self.train_resolution, self.model)
+                result_image = color_opt.detach()[0].cpu().numpy()[::-1]
+                self.frames.append((result_image * 255).astype(np.uint8))
+        with imageio.get_writer(f"{self.outputdir}/train.mp4", fps=self.fps) as writer:
+            for frame in self.frames:
+                writer.append_data(frame)
+        self.frames = []

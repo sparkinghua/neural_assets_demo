@@ -41,10 +41,10 @@ class RNA(nn.Module):
 
         self.layers = nn.ModuleList()
         self.layers.append(nn.Linear(self.in_features, self.hidden_features))
-        self.layers.append(nn.ReLU())
+        self.layers.append(nn.LeakyReLU())
         for _ in range(self.num_layers - 2):
             self.layers.append(nn.Linear(self.hidden_features, self.hidden_features))
-            self.layers.append(nn.ReLU())
+            self.layers.append(nn.LeakyReLU())
         self.layers.append(nn.Linear(self.hidden_features, self.out_features))
         self.layers.append(nn.ReLU())
 
@@ -56,7 +56,7 @@ class RNA(nn.Module):
             color = torch.nn.functional.grid_sample(
                 self.texture.expand(uvs.shape[0], -1, -1, -1), uvs, mode="bilinear", padding_mode="border", align_corners=True
             ).permute(0, 2, 3, 1)
-            color = torch.clamp(color, 0.0, 1.0)
+            # color = torch.clamp(color, 0.0, 1.0)
             x = torch.cat([x[..., :-2], color], dim=-1)
         if self.fourier_enc:
             pos = x[..., :3]

@@ -9,7 +9,7 @@ class FilePathConfig:
 
     data_dir: str = "data"
     """Directory containing data."""
-    data: str = "move_light"
+    data: str = "move"
     """Name of the data."""
     output_dir: str = "output"
     """Directory for output."""
@@ -19,6 +19,8 @@ class FilePathConfig:
     """Name of the scene."""
     resume: Optional[str] = None
     """path to the checkpoint to resume training from"""
+    mode: str = "train"
+    """mode of the script, train or test"""
 
 
 @dataclass(frozen=True)
@@ -67,16 +69,18 @@ class ModelParamConfig:
 class OptimConfig:
     """Configuration for optimization."""
 
-    max_iter: int = 20
+    max_iter: int = 50
     """maximum number of iterations"""
-    warmup_iter: int = 2
+    warmup_iter: int = 5
     """number of warmup iterations"""
-    batch_size: int = 4
+    batch_size: int = 2
     """batch size for training"""
     lr: float = 1e-3
     """learning rate for training"""
     weight_decay: float = 1e-4
     """weight decay for training"""
+    early_stopping: Optional[int] = None
+    """number of iterations to wait for early stopping"""
 
 
 @dataclass(frozen=True)

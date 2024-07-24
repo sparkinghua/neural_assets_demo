@@ -2,6 +2,12 @@
 
 A demo for the rasterization version of Neural Assets
 
+train the model:
 ```bash
-python main.py
+bash ./script/train.sh
+```
+
+generate the data:
+```bash
+bash ./script/data.sh
 ```

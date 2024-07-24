@@ -8,7 +8,7 @@ import imageio
 from tqdm import tqdm
 
 import util
-from render import render_refl
+from render import render_point_refl
 
 
 def ref_generator(radius=3.5, samples=63, x=0.4, n=1.0, f=200.0, resolution=[512, 512], fps=10):
@@ -56,7 +56,7 @@ def ref_generator(radius=3.5, samples=63, x=0.4, n=1.0, f=200.0, resolution=[512
         a_mvp = torch.as_tensor(a_mvp, dtype=torch.float32, device="cuda")[None, ...]
         a_camera_pos = torch.as_tensor(np.linalg.inv(a_mv)[:3, 3], dtype=torch.float32, device="cuda")[None, ...]
         a_light_pos = torch.as_tensor(np.matmul(a_rot_light, light_pos)[..., :3], dtype=torch.float32, device="cuda")[None, ...]
-        color = render_refl(
+        color = render_point_refl(
             glctx,
             pos,
             pos_idx,
